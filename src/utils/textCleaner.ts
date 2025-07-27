@@ -17,43 +17,56 @@ export class StreamTextCleaner {
    * Process a chunk of text, handling partial reference patterns
    */
   processChunk(chunk: string): string {
+    console.log('🔍 Processing chunk:', JSON.stringify(chunk));
+    
     // Add chunk to buffer
     this.buffer += chunk;
+    console.log('📝 Buffer after adding chunk:', JSON.stringify(this.buffer));
     
-    // Find all complete reference patterns
-    const matches = [...this.buffer.matchAll(this.refPattern)];
+    // First, remove any complete reference patterns from the buffer
+    const beforeClean = this.buffer;
+    this.buffer = this.buffer.replace(this.refPattern, '');
     
-    if (matches.length === 0) {
-      // No complete patterns found
-      // Check if buffer ends with potential start of pattern
-      const potentialStart = this.buffer.match(/<ref>(\[(\d*))?$/);
-      if (potentialStart) {
-        // Keep potential pattern start in buffer
-        const keepLength = potentialStart[0].length;
-        const output = this.buffer.slice(0, -keepLength);
-        this.buffer = this.buffer.slice(-keepLength);
-        return output;
-      } else {
-        // No potential pattern, output everything
-        const output = this.buffer;
-        this.buffer = '';
-        return output;
+    if (beforeClean !== this.buffer) {
+      console.log('🧹 Removed complete patterns. Buffer now:', JSON.stringify(this.buffer));
+    }
+    
+    // Check if buffer ends with potential incomplete pattern
+    // Patterns to watch for: <, <r, <re, <ref, <ref>, <ref>[, <ref>[1, <ref>[12, etc.
+    const incompletePatterns = [
+      /<$/,                    // just <
+      /<r$/,                   // <r
+      /<re$/,                  // <re  
+      /<ref$/,                 // <ref
+      /<ref>$/,                // <ref>
+      /<ref>\[$/,              // <ref>[
+      /<ref>\[\d*$/            // <ref>[digits (incomplete)
+    ];
+    
+    let keepInBuffer = '';
+    for (const pattern of incompletePatterns) {
+      const match = this.buffer.match(pattern);
+      if (match) {
+        keepInBuffer = match[0];
+        console.log('🔄 Found incomplete pattern, keeping in buffer:', JSON.stringify(keepInBuffer));
+        break;
       }
     }
     
-    // Remove all complete patterns and output clean text
-    let cleanBuffer = this.buffer.replace(this.refPattern, '');
-    
-    // Check if buffer ends with potential incomplete pattern
-    const potentialStart = cleanBuffer.match(/<ref>(\[(\d*))?$/);
-    if (potentialStart) {
-      const keepLength = potentialStart[0].length;
-      const output = cleanBuffer.slice(0, -keepLength);
-      this.buffer = this.buffer.slice(-keepLength);
+    if (keepInBuffer) {
+      // Output everything except the incomplete pattern
+      const output = this.buffer.slice(0, -keepInBuffer.length);
+      this.buffer = keepInBuffer;
+      console.log('✅ Output:', JSON.stringify(output));
+      console.log('📦 Remaining in buffer:', JSON.stringify(this.buffer));
       return output;
     } else {
+      // No incomplete pattern, output everything and clear buffer
+      const output = this.buffer;
       this.buffer = '';
-      return cleanBuffer;
+      console.log('✅ Output (complete):', JSON.stringify(output));
+      console.log('📦 Buffer cleared');
+      return output;
     }
   }
   
@@ -61,8 +74,13 @@ export class StreamTextCleaner {
    * Get any remaining text in buffer (call at end of stream)
    */
   flush(): string {
+    console.log('🏁 Flushing remaining buffer:', JSON.stringify(this.buffer));
+    
+    // Clean any remaining complete patterns
     const remaining = this.buffer.replace(this.refPattern, '');
     this.buffer = '';
+    
+    console.log('🏁 Final flush output:', JSON.stringify(remaining));
     return remaining;
   }
   
@@ -70,6 +88,7 @@ export class StreamTextCleaner {
    * Reset the cleaner state
    */
   reset(): void {
+    console.log('🔄 Resetting text cleaner');
     this.buffer = '';
   }
 }

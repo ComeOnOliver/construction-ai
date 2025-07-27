@@ -118,7 +118,9 @@ export class DashscopeService {
               }
               if (data.output?.text) {
                 const chunk = data.output.text;
+                console.log('📨 Raw chunk from API:', JSON.stringify(chunk));
                 const cleanedChunk = this.textCleaner.processChunk(chunk);
+                console.log('🧽 Cleaned chunk:', JSON.stringify(cleanedChunk));
                 fullResponse += cleanedChunk;
                 if (cleanedChunk) {
                   yield cleanedChunk;
@@ -128,6 +130,7 @@ export class DashscopeService {
                 // Flush any remaining text
                 const remaining = this.textCleaner.flush();
                 if (remaining) {
+                  console.log('🏁 Flushing remaining text:', JSON.stringify(remaining));
                   fullResponse += remaining;
                   yield remaining;
                 }
@@ -153,7 +156,9 @@ export class DashscopeService {
           const data = JSON.parse(buffer.slice(5));
           if (data.output?.text) {
             const chunk = data.output.text;
+            console.log('📨 Final chunk from API:', JSON.stringify(chunk));
             const cleanedChunk = this.textCleaner.processChunk(chunk);
+            console.log('🧽 Final cleaned chunk:', JSON.stringify(cleanedChunk));
             fullResponse += cleanedChunk;
             if (cleanedChunk) {
               yield cleanedChunk;
@@ -163,6 +168,7 @@ export class DashscopeService {
           // Flush any remaining text at the end
           const remaining = this.textCleaner.flush();
           if (remaining) {
+            console.log('🏁 Final flush:', JSON.stringify(remaining));
             fullResponse += remaining;
             yield remaining;
           }
