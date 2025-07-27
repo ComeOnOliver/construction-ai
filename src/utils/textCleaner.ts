@@ -2,8 +2,8 @@
  * Clean text by removing reference patterns like <ref>[1]</ref>, <ref>[20]</ref>, etc.
  */
 export function cleanText(text: string): string {
-  // Remove <ref>[number]</ref> patterns
-  return text.replace(/<ref>\[\d+\]<\/ref>/g, '');
+  // Remove <ref>[number]</ref> patterns and complex patterns like <ref>[1][2][7]</ref>
+  return text.replace(/<ref>\[[\d\]\[]*\d*\]<\/ref>/g, '');
 }
 
 /**
@@ -11,7 +11,6 @@ export function cleanText(text: string): string {
  */
 export class StreamTextCleaner {
   private buffer: string = '';
-  private readonly refPattern = /<ref>\[\d+\]<\/ref>/g;
   
   /**
    * Process a chunk of text, handling partial reference patterns
@@ -23,24 +22,33 @@ export class StreamTextCleaner {
     this.buffer += chunk;
     console.log('📝 Buffer after adding chunk:', JSON.stringify(this.buffer));
     
-    // First, remove any complete reference patterns from the buffer
+    // Look for complete reference patterns and remove them
+    // This regex handles both simple <ref>[1]</ref> and complex <ref>[1][2][7]</ref> patterns
+    const refPattern = /<ref>\[[\d\]\[]*\d*\]<\/ref>/g;
     const beforeClean = this.buffer;
-    this.buffer = this.buffer.replace(this.refPattern, '');
+    this.buffer = this.buffer.replace(refPattern, '');
     
     if (beforeClean !== this.buffer) {
       console.log('🧹 Removed complete patterns. Buffer now:', JSON.stringify(this.buffer));
     }
     
     // Check if buffer ends with potential incomplete pattern
-    // Patterns to watch for: <, <r, <re, <ref, <ref>, <ref>[, <ref>[1, <ref>[12, etc.
+    // We need to be more aggressive about detecting incomplete patterns
     const incompletePatterns = [
-      /<$/,                    // just <
-      /<r$/,                   // <r
-      /<re$/,                  // <re  
-      /<ref$/,                 // <ref
-      /<ref>$/,                // <ref>
-      /<ref>\[$/,              // <ref>[
-      /<ref>\[\d*$/            // <ref>[digits (incomplete)
+      /<$/,                           // just <
+      /<r$/,                          // <r
+      /<re$/,                         // <re  
+      /<ref$/,                        // <ref
+      /<ref>$/,                       // <ref>
+      /<ref>\[$/,                     // <ref>[
+      /<ref>\[[\d\]\[]*$/,            // <ref>[digits and brackets (incomplete)
+      /<ref>\[[\d\]\[]*\d*$/,         // <ref>[complex pattern (incomplete)
+      /<ref>\[[\d\]\[]*\d*\]$/,       // <ref>[pattern] but no closing tag
+      /<ref>\[[\d\]\[]*\d*\]<$/,      // <ref>[pattern]< (incomplete closing)
+      /<ref>\[[\d\]\[]*\d*\]<\/$/,    // <ref>[pattern]</ (incomplete closing)
+      /<ref>\[[\d\]\[]*\d*\]<\/r$/,   // <ref>[pattern]</r (incomplete closing)
+      /<ref>\[[\d\]\[]*\d*\]<\/re$/,  // <ref>[pattern]</re (incomplete closing)
+      /<ref>\[[\d\]\[]*\d*\]<\/ref$/  // <ref>[pattern]</ref (incomplete closing)
     ];
     
     let keepInBuffer = '';
@@ -77,7 +85,8 @@ export class StreamTextCleaner {
     console.log('🏁 Flushing remaining buffer:', JSON.stringify(this.buffer));
     
     // Clean any remaining complete patterns
-    const remaining = this.buffer.replace(this.refPattern, '');
+    const refPattern = /<ref>\[[\d\]\[]*\d*\]<\/ref>/g;
+    const remaining = this.buffer.replace(refPattern, '');
     this.buffer = '';
     
     console.log('🏁 Final flush output:', JSON.stringify(remaining));
