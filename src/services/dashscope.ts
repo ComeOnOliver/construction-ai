@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { createConversation, saveMessage } from './supabase';
-import { cleanText } from '../utils/textCleaner';
+import { StreamTextCleaner } from '../utils/textCleaner';
 
 const APP_ID = import.meta.env.VITE_DASHSCOPE_APP_ID;
 const API_KEY = import.meta.env.VITE_DASHSCOPE_API_KEY;
@@ -12,6 +12,7 @@ const CONVERSATION_ID_KEY = 'conversation_id';
 export class DashscopeService {
   private sessionId: string | null = null;
   private conversationId: string | null = null;
+  private textCleaner: StreamTextCleaner = new StreamTextCleaner();
 
   constructor() {
     this.sessionId = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -21,6 +22,7 @@ export class DashscopeService {
   async clearSession() {
     this.sessionId = null;
     this.conversationId = null;
+    this.textCleaner.reset();
     localStorage.removeItem(SESSION_STORAGE_KEY);
     localStorage.removeItem(CONVERSATION_ID_KEY);
     
@@ -39,6 +41,9 @@ export class DashscopeService {
     if (!APP_ID || !API_KEY) {
       throw new Error('请在 .env 文件中配置 DashScope 环境变量');
     }
+
+    // Reset text cleaner for new message
+    this.textCleaner.reset();
 
     try {
       if (this.conversationId) {
@@ -113,11 +118,19 @@ export class DashscopeService {
               }
               if (data.output?.text) {
                 const chunk = data.output.text;
-                const cleanedChunk = cleanText(chunk);
+                const cleanedChunk = this.textCleaner.processChunk(chunk);
                 fullResponse += cleanedChunk;
-                yield cleanedChunk;
+                if (cleanedChunk) {
+                  yield cleanedChunk;
+                }
               }
               if (data.output?.finish_reason === 'stop') {
+                // Flush any remaining text
+                const remaining = this.textCleaner.flush();
+                if (remaining) {
+                  fullResponse += remaining;
+                  yield remaining;
+                }
                 if (this.conversationId) {
                   await saveMessage({
                     conversation_id: this.conversationId,
@@ -140,18 +153,27 @@ export class DashscopeService {
           const data = JSON.parse(buffer.slice(5));
           if (data.output?.text) {
             const chunk = data.output.text;
-            const cleanedChunk = cleanText(chunk);
+            const cleanedChunk = this.textCleaner.processChunk(chunk);
             fullResponse += cleanedChunk;
-            yield cleanedChunk;
-            
-            if (this.conversationId) {
-              await saveMessage({
-                conversation_id: this.conversationId,
-                content: cleanText(fullResponse),
-                role: 'assistant',
-                timestamp: new Date(),
-              });
+            if (cleanedChunk) {
+              yield cleanedChunk;
             }
+          }
+          
+          // Flush any remaining text at the end
+          const remaining = this.textCleaner.flush();
+          if (remaining) {
+            fullResponse += remaining;
+            yield remaining;
+          }
+            
+          if (this.conversationId) {
+            await saveMessage({
+              conversation_id: this.conversationId,
+              content: fullResponse,
+              role: 'assistant',
+              timestamp: new Date(),
+            });
           }
         } catch (e) {
           // Ignore parsing errors for the last chunk
