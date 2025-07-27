@@ -1,9 +1,10 @@
 /**
- * Clean text by removing reference patterns like <ref>...</ref>
+ * Clean text by removing reference patterns like <ref>...</ref> or malformed <ref>...</>
  */
 export function cleanText(text: string): string {
-  // Remove any content inside <ref>...</ref>
-  return text.replace(/<ref>[\s\S]*?<\/ref>/g, '');
+  // Remove well-formed <ref>...</ref> and malformed <ref>...</>
+  return text.replace(/<ref>[\s\S]*?<\/ref>/g, '') // properly closed
+             .replace(/<ref>[\s\S]*?>/g, '');       // malformed but closed with just '>'
 }
 
 /**
@@ -17,58 +18,54 @@ export class StreamTextCleaner {
    */
   processChunk(chunk: string): string {
     console.log('🔍 Processing chunk:', JSON.stringify(chunk));
-
-    // Add chunk to buffer
     this.buffer += chunk;
     console.log('📝 Buffer after adding chunk:', JSON.stringify(this.buffer));
 
-    // Remove complete <ref>...</ref> patterns (non-greedy match)
-    const refPattern = /<ref>[\s\S]*?<\/ref>/g;
-    const beforeClean = this.buffer;
-    this.buffer = this.buffer.replace(refPattern, '');
+    // Remove all <ref>...</ref> and <ref>...</> (malformed)
+    const fullPattern = /<ref>[\s\S]*?<\/ref>/g;
+    const partialPattern = /<ref>[\s\S]*?>/g;
+    const before = this.buffer;
+    this.buffer = this.buffer.replace(fullPattern, '').replace(partialPattern, '');
 
-    if (beforeClean !== this.buffer) {
-      console.log('🧹 Removed complete patterns. Buffer now:', JSON.stringify(this.buffer));
+    if (before !== this.buffer) {
+      console.log('🧹 Cleaned full/malformed patterns. Buffer now:', JSON.stringify(this.buffer));
     }
 
-    // Check for potential incomplete <ref>...</ref> patterns at the end of the buffer
-    const incompletePattern = /<ref>[\s\S]*$/;
-    const match = this.buffer.match(incompletePattern);
-
-    if (match) {
-      const keepInBuffer = match[0];
+    // Detect and preserve truly incomplete tags like `<ref>[1][2][3]`
+    const incompleteMatch = this.buffer.match(/<ref>[\s\S]*$/);
+    if (incompleteMatch) {
+      const keepInBuffer = incompleteMatch[0];
       const output = this.buffer.slice(0, -keepInBuffer.length);
       this.buffer = keepInBuffer;
-      console.log('🔄 Found incomplete pattern, keeping in buffer:', JSON.stringify(keepInBuffer));
+      console.log('🔄 Incomplete pattern found. Keeping in buffer:', JSON.stringify(keepInBuffer));
       console.log('✅ Output:', JSON.stringify(output));
-      console.log('📦 Remaining in buffer:', JSON.stringify(this.buffer));
       return output;
     } else {
       const output = this.buffer;
       this.buffer = '';
       console.log('✅ Output (complete):', JSON.stringify(output));
-      console.log('📦 Buffer cleared');
       return output;
     }
   }
 
   /**
-   * Get any remaining text in buffer (call at end of stream)
+   * Flush any remaining content in the buffer
    */
   flush(): string {
-    console.log('🏁 Flushing remaining buffer:', JSON.stringify(this.buffer));
-    const refPattern = /<ref>[\s\S]*?<\/ref>/g;
-    const remaining = this.buffer.replace(refPattern, '');
+    console.log('🏁 Flushing buffer:', JSON.stringify(this.buffer));
+    const cleaned = this.buffer
+      .replace(/<ref>[\s\S]*?<\/ref>/g, '')
+      .replace(/<ref>[\s\S]*?>/g, '');
     this.buffer = '';
-    console.log('🏁 Final flush output:', JSON.stringify(remaining));
-    return remaining;
+    console.log('🏁 Final flush output:', JSON.stringify(cleaned));
+    return cleaned;
   }
 
   /**
    * Reset the cleaner state
    */
   reset(): void {
-    console.log('🔄 Resetting text cleaner');
+    console.log('🔄 Resetting buffer');
     this.buffer = '';
   }
 }
