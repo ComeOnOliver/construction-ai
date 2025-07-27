@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createConversation, saveMessage } from './supabase';
+import { cleanText } from '../utils/textCleaner';
 
 const APP_ID = import.meta.env.VITE_DASHSCOPE_APP_ID;
 const API_KEY = import.meta.env.VITE_DASHSCOPE_API_KEY;
@@ -112,8 +113,9 @@ export class DashscopeService {
               }
               if (data.output?.text) {
                 const chunk = data.output.text;
-                fullResponse += chunk;
-                yield chunk;
+                const cleanedChunk = cleanText(chunk);
+                fullResponse += cleanedChunk;
+                yield cleanedChunk;
               }
               if (data.output?.finish_reason === 'stop') {
                 if (this.conversationId) {
@@ -138,13 +140,14 @@ export class DashscopeService {
           const data = JSON.parse(buffer.slice(5));
           if (data.output?.text) {
             const chunk = data.output.text;
-            fullResponse += chunk;
-            yield chunk;
+            const cleanedChunk = cleanText(chunk);
+            fullResponse += cleanedChunk;
+            yield cleanedChunk;
             
             if (this.conversationId) {
               await saveMessage({
                 conversation_id: this.conversationId,
-                content: fullResponse,
+                content: cleanText(fullResponse),
                 role: 'assistant',
                 timestamp: new Date(),
               });
